@@ -1,0 +1,8 @@
+# Credenciales locales de la red Wi-Fi para el firmware ESP8266
+firmware/nodemcu/**/secrets.h
+
+# Python
+__pycache__/
+*.py[cod]
+*.venv/
+venv/
