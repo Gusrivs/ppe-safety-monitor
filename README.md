@@ -1,64 +1,81 @@
 # Sistema de monitoreo automatizado de EPP y seguridad industrial
 
-Primera etapa del prototipo: verificar comunicación HTTP/JSON entre un NodeMCU V3 (ESP8266) y una computadora Debian en la misma red Wi-Fi. El lector de huellas, los sensores HC-SR04, YOLO y la base de datos se integrarán en etapas posteriores.
+Prototipo académico (Arquitectura de Computadoras, UES-FMOcc). Verifica que cada trabajador use
+**casco y chaleco** dentro de una zona de construcción, identifica a cada persona con **huella
+dactilar** al entrar y registra **asistencia**, infracciones y solicitudes de asistencia técnica.
 
-## Estructura
-
-```text
-server/server.py                    Servidor HTTP de Python
-firmware/nodemcu/nodemcu_client/nodemcu_client.ino Cliente Wi-Fi para ESP8266
-firmware/nodemcu/nodemcu_client/secrets.example.h  Plantilla local de configuración
+```
+ Fila de trabajadores
+        │
+  [HC-SR04 #1] → [R307S huella + LCD 16x2] → [servo SG90 puerta] → [HC-SR04 #2]      ┐
+        ▲                                                                            │ Arduino UNO
+   [pulsador asistencia]                                       [pulsador asistencia] ┘  (USB serial, JSON)
+                                   │
+                                   ▼
+                         PC (Python / FastAPI)  ◄──── celular con IP Webcam (video)
+          ┌────────────────────────┼──────────────────────────┐
+     Control de acceso       Visión (YOLO + tracker)      SQLite + capturas
+     (máquina de estados)    casco/chaleco + identidad     (todo local)
+          └────────────────────────┼──────────────────────────┘
+                                   ▼
+                       API REST + WebSocket + video MJPEG
+                                   ▼
+                        Interfaz Vue (frontend/, por crear)
 ```
 
-## 1. Preparar Debian
+## Estructura del proyecto
 
-Consulta la IP local de Debian con:
+| Carpeta | Qué contiene |
+|---|---|
+| `backend/` | **El cerebro** (Python/FastAPI): acceso, visión, base de datos, API. |
+| `backend/app/access/` | Máquina de estados de entrada/salida (intentos, tiempos, reglas). |
+| `backend/app/device/` | Comunicación con el Arduino (serial real y **simulador** sin hardware). |
+| `backend/app/vision/` | Cámara, YOLO, reglas casco/chaleco, tracker, identidad, infracciones de 30 s. |
+| `backend/app/api/` | Rutas HTTP/WebSocket que consumirá Vue. |
+| `backend/tests/` | Pruebas automáticas (`pytest`). |
+| `backend/tools/` | Probar la cámara y probar la IA sobre un video. |
+| `firmware/arduino_uno/` | Sketch del Arduino UNO y guía de conexiones. |
+| `ml/` | Entrenamiento: fotogramas, etiquetado, dataset, entrenar, evaluar. |
+| `frontend/` | **Aún no existe: aquí se crea el proyecto Vue** (`npm create vue@latest frontend`, ver `docs/FRONTEND.md`). |
+| `config/` | `config.example.yaml` → cópialo a `config.yaml`. |
+| `data/` | Se genera sola: base de datos, capturas de infracciones, grabaciones. |
+| `models/` | Pesos `.pt` de YOLO (no se suben a Git). |
+| `docs/` | `ARQUITECTURA.md`, `PROTOCOLO_SERIAL.md`, `API.md`, `FRONTEND.md` y el perfil del proyecto (PDF). |
+| `legacy/` | Prueba inicial del ESP8266 (HTTP). Ya no se usa; se conserva como referencia. |
+| `assets/` | Imágenes de prueba. |
+
+## Puesta en marcha (sin hardware, en 5 minutos)
 
 ```bash
-hostname -I
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r backend/requirements-dev.txt        # (ultralytics es pesado; puedes omitirlo al inicio)
+cp config/config.example.yaml config/config.yaml    # ya viene con device.simulate: true
+cd backend
+python -m pytest -q                                 # las pruebas deben pasar
+python -m uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8000
 ```
 
-Si Debian usa UFW, permite conexiones desde la red local al puerto del servidor (reemplaza la subred por la de tu Wi-Fi):
+- Documentación interactiva de la API: <http://localhost:8000/docs>
+- Video en vivo: <http://localhost:8000/video> (si no hay cámara muestra "Sin señal")
+- Con el **simulador** puedes recorrer todo el flujo desde `/docs` → `POST /api/sim/event`
+  (por ejemplo `{"event":{"evt":"presence","sensor":1}}`). Ver `docs/ARQUITECTURA.md`.
 
-```bash
-sudo ufw allow from 192.168.1.0/24 to any port 8080 proto tcp
-```
+## Pasar a hardware real
 
-Inicia el servidor desde la raíz del proyecto:
+1. Arma el circuito y carga el sketch: `firmware/arduino_uno/README.md`.
+2. En `config/config.yaml`: `device.simulate: false` y `device.port: /dev/ttyACM0`
+   (en Linux agrega tu usuario al grupo `dialout`: `sudo usermod -aG dialout $USER` y reinicia sesión).
+3. Cámara: instala **IP Webcam** en el celular, pon su URL en `camera.url` y prueba con
+   `python backend/tools/test_camera.py`.
+4. Entrena el detector con tus videos (`ml/README.md`) y activa `vision.enabled: true`.
 
-```bash
-python3 server/server.py
-```
+## Estado actual
 
-La API escucha en `0.0.0.0:8080`. Comprueba su estado desde Debian:
+Funciona y está probado con pruebas automáticas: base de datos, máquina de estados de acceso
+(3 intentos, intruso, cruce, salida, enrolamiento, asistencia técnica), API/WebSocket/CSV,
+simulador, monitor de infracciones (30 s / enfriamiento 1 min), traspaso de ID huella → cámara,
+y el flujo de datos propios (video → fotogramas → dataset train/val/test).
 
-```bash
-curl http://127.0.0.1:8080/health
-```
-
-## 2. Preparar Arduino IDE
-
-1. Copia `firmware/nodemcu/nodemcu_client/secrets.example.h` como `firmware/nodemcu/nodemcu_client/secrets.h`.
-2. Configura `WIFI_SSID`, `WIFI_PASSWORD`, `SERVER_HOST` (la IP de Debian) y `SERVER_PORT` en `secrets.h`.
-3. Abre `firmware/nodemcu/nodemcu_client/nodemcu_client.ino` en Arduino IDE. El archivo `secrets.h` debe permanecer en la misma carpeta del sketch.
-4. Selecciona la placa NodeMCU 1.0 (ESP-12E Module) y el puerto correspondiente, por ejemplo `/dev/ttyUSB0`; carga el sketch.
-5. Abre el Monitor Serial a 115200 baudios.
-
-El cliente manda un `ping` al iniciar y luego cada 10 segundos. En la consola de Debian debe aparecer `Evento recibido` y el Monitor Serial debe mostrar una respuesta HTTP 200.
-
-## API inicial
-
-`POST /api/event` acepta un objeto JSON. Para la prueba inicial:
-
-```json
-{"event":"ping","device":"nodemcu-esp8266"}
-```
-
-Eventos previstos para las siguientes etapas:
-
-```json
-{"event":"worker_identified","worker_id":4}
-{"event":"crossing","direction":"IN"}
-```
-
-`direction` admite `IN` o `OUT`. El servidor valida estos formatos, pero todavía no mantiene estado de operario ni realiza inferencia o persistencia. Los JSON mal formados reciben HTTP 400 y los eventos con campos inválidos reciben HTTP 422.
+**Aún sin probar con equipo real** (no se pudo desde el entorno de desarrollo): firmware en el
+UNO, cámara real, y los modelos YOLO. Aparte, falta el frontend Vue y el entrenamiento con tus
+videos. Límites conocidos en `docs/ARQUITECTURA.md`.

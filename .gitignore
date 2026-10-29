@@ -1,8 +1,22 @@
 # Credenciales locales de la red Wi-Fi para el firmware ESP8266
+# configuraciones---
 firmware/nodemcu/**/secrets.h
+config/config.yaml
 
 # Python
 __pycache__/
 *.py[cod]
 *.venv/
 venv/
+
+# Datos y artefactos de visión artificial (se generan localmente)
+datasets/
+models/
+runs/
+output/vision/
+
+# Datos y artefactos de visión artificial (se generan localmente)
+datasets/
+models/
+runs/
+output/vision/

@@ -1,0 +1,8 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pyserial>=3.5
+PyYAML>=6.0
+numpy
+opencv-python>=4.8
+# Visión con IA (solo si vas a activar vision.enabled en la configuración):
+ultralytics>=8.3.0

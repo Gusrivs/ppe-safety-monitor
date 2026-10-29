@@ -1,0 +1,48 @@
+# Copia este archivo como config/config.yaml y ajusta lo que necesites.
+# Si no existe config.yaml, el backend usa estos mismos valores por defecto.
+
+storage:
+  data_dir: data            # base de datos, capturas y grabaciones (todo local)
+
+device:
+  simulate: true            # true = sin Arduino (dispositivo simulado). Ponlo en false con el hardware.
+  port: /dev/ttyACM0        # Linux: /dev/ttyACM0 o /dev/ttyUSB0. Windows: COM3, etc.
+  baud: 115200
+  fingerprint_capacity: 127 # ranuras (slots) disponibles en el R307S que vamos a usar
+
+access:
+  max_attempts: 3           # intentos de huella antes de dar alerta de intruso
+  auth_timeout_s: 15        # tiempo que espera el dedo en cada intento
+  crossing_timeout_s: 10    # tras una huella correcta, tiempo para que el 2.º sensor confirme el cruce
+  door_close_delay_s: 1.0   # espera tras el cruce antes de cerrar el servo
+  denied_display_s: 5       # cuanto tiempo se muestra "VETE!!" en la pantalla
+  retrigger_cooldown_s: 5   # tras un intento abortado, ignora nuevos disparos del mismo lado
+  device_timeout_s: 6       # sin latidos del Arduino en este tiempo => "dispositivo desconectado"
+
+camera:
+  url: "http://192.168.0.7:8080/video"   # IP Webcam del celular (IP fija recomendada)
+  reconnect_s: 2
+
+vision:
+  enabled: false            # false = solo transmite video (útil para probar cámara y GUI)
+  person_model: yolo26n.pt  # detector de personas (COCO) + tracker
+  ppe_model: models/ppe/best.pt
+  tracker: bytetrack.yaml
+  device: cpu
+  confidence: 0.25
+  imgsz: 640
+  max_fps: 8                # limita la inferencia para no saturar la CPU
+  min_person_height: 80     # px; personas más pequeñas = "indeterminado"
+  violation_seconds: 30     # infracción continua necesaria para advertir
+  cooldown_seconds: 60      # minimo entre advertencias del mismo trabajador
+  compliance_reset_seconds: 3   # tiempo cumpliendo para reiniciar el contador
+  track_lost_seconds: 10    # tras este tiempo sin ver un track, se cierra su estado
+  # Zona (normalizada 0..1: x1, y1, x2, y2) donde aparece quien acaba de cruzar la puerta.
+  entry_zone: [0.0, 0.0, 1.0, 1.0]
+  handoff_window_s: 15      # tiempo para que la cámara vea al trabajador recién identificado
+  handoff_lookback_s: 5     # acepta tracks que aparecieron justo antes del cruce
+
+recording:
+  enabled: false            # grabar video crudo en segmentos (para revisar anomalías)
+  segment_minutes: 5
+  fps: 10
