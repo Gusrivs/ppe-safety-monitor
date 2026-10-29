@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any
 
 from .access.controller import AccessController
@@ -92,7 +93,14 @@ class AppContext:
     def status(self) -> dict[str, Any]:
         data = self.access.status()
         data.update({
-            "camera_online": bool(self.camera.ok),
+            # Considera la cámara en línea mientras lleguen fotogramas recientes.
+            # `ok` solo refleja si VideoCapture sigue abierto y puede ser falso
+            # entre reconexiones aunque el último fotograma aún esté disponible.
+            "camera_online": (
+                time.monotonic() - getattr(self.camera, "last_frame_at", 0.0)
+                < max(5.0, self.settings.camera.reconnect_s * 2)
+                if getattr(self.camera, "last_frame_at", 0.0) else False
+            ),
             "vision_enabled": self.pipeline is not None,
             "vision_fps": round(self.vision.fps, 1),
             "simulated_device": isinstance(self.device, SimulatedDevice),

@@ -1,5 +1,9 @@
 <script setup lang="ts">
-// No necesitas importar RouterView o RouterLink, Vue los registra globalmente
+import { onMounted } from 'vue'
+import { useLiveStore } from '@/stores/live'
+
+const live = useLiveStore()
+onMounted(() => live.start())
 </script>
 
 <template>

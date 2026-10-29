@@ -1,0 +1,11 @@
+Carpeta raiz: source .venv/bin/activate
+
+Inicia el server en IP Webcam
+
+cd backend
+python -m uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8000
+
+cd frontend
+npm run dev
+
+para salir del entorno virtual: deactivate
